@@ -3,46 +3,123 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FireGuard - Yangın İzleme</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FireGuard | Yangın İzleme</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
+    * { box-sizing: border-box; }
     body {
-      margin: 0;
-      padding: 30px 16px;
+      margin: 0; background: #0b1220; color: #f1f5f9;
       font-family: Arial, sans-serif;
-      background: #101820;
-      color: white;
-      text-align: center;
     }
-    header {
-      background: #c62828;
-      padding: 20px;
-      border-radius: 12px;
-    }
-    section {
-      max-width: 600px;
-      margin: 24px auto;
-      padding: 24px;
-      background: #202c36;
-      border-radius: 14px;
-    }
-    .status {
-      color: #ffca28;
-      font-weight: bold;
-    }
+    header { padding: 20px; background: #111c2e; border-bottom: 1px solid #29374b; }
+    h1 { margin: 0; color: #ff6248; font-size: 26px; }
+    header p { margin: 8px 0 0; color: #aab8cc; }
+    main { padding: 16px; max-width: 1200px; margin: auto; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 12px; margin-bottom: 16px; }
+    .card { background: #152238; border: 1px solid #2b3b52; padding: 16px; border-radius: 12px; }
+    .label { color: #aab8cc; font-size: 13px; }
+    .value { font-size: 27px; font-weight: bold; margin-top: 8px; }
+    button { background: #ff6248; color: #fff; border: 0; padding: 11px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    #status { color: #b9c7d9; margin: 14px 0; font-size: 14px; }
+    #map { height: 55vh; min-height: 340px; border-radius: 12px; border: 1px solid #34445a; }
+    .note { color: #aab8cc; font-size: 12px; line-height: 1.5; margin-top: 14px; }
+    .hotspot { background: #ff4d36; border: 2px solid #fff; border-radius: 50%; width: 13px; height: 13px; box-shadow: 0 0 12px #ff4d36; }
   </style>
 </head>
 <body>
   <header>
     <h1>🔥 FireGuard</h1>
-    <p>Orman Yangını İzleme Sistemi</p>
+    <p>Uydu tabanlı sıcak nokta izleme paneli</p>
   </header>
-  <section>
-    <h2>Sistem Durumu</h2>
-    <p class="status">Demo modu aktif</p>
-    <p>FireGuard arayüzü hazır.</p>
-    <p>Gerçek zamanlı yangın verileri henüz bağlı değil.</p>
-  </section>
-  <footer>FireGuard Monitoring · İlk sürüm</footer>
+  <main>
+    <div class="stats">
+      <div class="card">
+        <div class="label">Algılanan sıcak noktalar</div>
+        <div class="value" id="count">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Veri kaynağı</div>
+        <div class="value" style="font-size:20px">NASA FIRMS</div>
+      </div>
+      <div class="card">
+        <div class="label">Son kontrol</div>
+        <div class="value" id="updated" style="font-size:18px">Henüz yok</div>
+      </div>
+    </div>
+    <button id="refresh">↻ Verileri yenile</button>
+    <div id="status">Harita hazırlanıyor...</div>
+    <div id="map"></div>
+    <p class="note">
+      Önemli: Uydu sıcak noktaları yangın olduğunun kesin kanıtı değildir.
+      Veriler gecikmeli olabilir; acil durumlar için resmî uyarıları takip edin.
+      Harita © OpenStreetMap katkıcıları.
+    </p>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map("map").setView([41.2, 21.4], 6);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap"
+    }).addTo(map);
+
+    const markers = L.layerGroup().addTo(map);
+
+    async function loadFires() {
+      const status = document.getElementById("status");
+      const button = document.getElementById("refresh");
+      button.disabled = true;
+      status.textContent = "NASA FIRMS verileri alınıyor...";
+
+      try {
+        const response = await fetch("/api/fires", { cache: "no-store" });
+        const data = await response.json();
+
+        if (!response.ok) throw new Error(data.error || "Veriler alınamadı.");
+
+        markers.clearLayers();
+
+        data.fires.forEach(fire => {
+          if (!Number.isFinite(fire.latitude) ||
+              !Number.isFinite(fire.longitude)) return;
+
+          const marker = L.marker([fire.latitude, fire.longitude], {
+            icon: L.divIcon({
+              className: "",
+              html: '<div class="hotspot"></div>',
+              iconSize: [13, 13],
+              iconAnchor: [6, 6]
+            })
+          });
+
+          marker.bindPopup(`
+            <b>Uydu sıcak noktası</b><br>
+            Enlem: ${fire.latitude}<br>
+            Boylam: ${fire.longitude}<br>
+            Tarih: ${fire.date || "Bilinmiyor"}<br>
+            Saat: ${fire.time || "Bilinmiyor"} UTC<br>
+            Güven: ${fire.confidence || "Bilinmiyor"}<br>
+            FRP: ${fire.frp ?? "Bilinmiyor"}
+          `);
+
+          markers.addLayer(marker);
+        });
+
+        document.getElementById("count").textContent = data.count;
+        document.getElementById("updated").textContent =
+          new Date().toLocaleTimeString("tr-TR");
+        status.textContent =
+          `${data.count} sıcak nokta gösteriliyor. Kaynak: ${data.source}.`;
+      } catch (error) {
+        status.textContent = "Hata: " + error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    document.getElementById("refresh").addEventListener("click", loadFires);
+    loadFires();
+  </script>
 </body>
 </html>
