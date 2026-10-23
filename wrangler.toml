@@ -1,6 +1,11 @@
 
 name = "fireguard-wildfire-monitoring"
+main = "src/index.js"
 compatibility_date = "2026-10-23"
 
 [assets]
 directory = "./"
+binding = "ASSETS"
+
+[vars]
+APP_NAME = "FireGuard"
