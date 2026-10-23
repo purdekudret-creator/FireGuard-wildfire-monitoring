@@ -43,8 +43,13 @@ export default {
             const response = await fetch(nasaUrl);
 
             if (!response.ok) {
-              throw new Error("NASA FIRMS isteği başarısız.");
-            }
+  const details = await response.text();
+  throw new Error(
+    `NASA FIRMS HTTP ${response.status}: ${details.slice(0, 300)}`
+  );
+}
+              
+            
 
             const csv = await response.text();
             const lines = csv.trim().split(/\r?\n/);
