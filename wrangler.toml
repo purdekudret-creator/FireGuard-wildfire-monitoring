@@ -1,0 +1,6 @@
+
+name = "fireguard-wildfire-monitoring"
+compatibility_date = "2026-10-23"
+
+[assets]
+directory = "./"
