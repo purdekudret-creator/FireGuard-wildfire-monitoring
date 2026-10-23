@@ -1,4 +1,4 @@
-
+   
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -8,74 +8,101 @@ export default {
 
       if (!apiKey) {
         return Response.json(
-          {
-            error: "NASA anahtarı eksik.",
-            message:
-              "Cloudflare Worker Settings bölümüne NASA_FIRMS_MAP_KEY adlı Secret ekleyin."
-          },
+          { error: "NASA_FIRMS_MAP_KEY Secret eksik." },
           { status: 500 }
         );
       }
 
       try {
-        const area = "19,39,24,43";
+        // Yaklaşık Avrupa sınırları
+        const west = -12;
+        const south = 34;
+        const east = 35;
+        const north = 72;
+        const step = 5;
+
         const source = "VIIRS_NOAA20_NRT";
-        const nasaUrl =
-          `https://firms.modaps.eosdis.nasa.gov/api/area/csv/` +
-          `${encodeURIComponent(apiKey)}/${source}/${area}/1`;
+        const areas = [];
 
-        const response = await fetch(nasaUrl);
-
-        if (!response.ok) {
-          return Response.json(
-            { error: "NASA FIRMS verileri alınamadı." },
-            { status: 502 }
-          );
+        for (let lon = west; lon < east; lon += step) {
+          for (let lat = south; lat < north; lat += step) {
+            areas.push([
+              lon,
+              lat,
+              Math.min(lon + step, east),
+              Math.min(lat + step, north)
+            ].join(","));
+          }
         }
 
-        const csv = await response.text();
-        const lines = csv.trim().split(/\r?\n/);
+        const results = await Promise.all(
+          areas.map(async area => {
+            const nasaUrl =
+              "https://firms.modaps.eosdis.nasa.gov/api/area/csv/" +
+              `${encodeURIComponent(apiKey)}/${source}/${area}/1`;
 
-        if (lines.length < 2) {
-          return Response.json({
-            source: "NASA FIRMS",
-            count: 0,
-            fires: []
-          });
-        }
+            const response = await fetch(nasaUrl);
 
-        const headers = lines.shift().split(",").map(h => h.trim());
+            if (!response.ok) {
+              throw new Error("NASA FIRMS isteği başarısız.");
+            }
 
-        const fires = lines
-          .filter(line => line.trim())
-          .map(line => {
-            const values = line.split(",");
-            const row = Object.fromEntries(
-              headers.map((header, i) => [
-                header,
-                (values[i] || "").trim()
-              ])
+            const csv = await response.text();
+            const lines = csv.trim().split(/\r?\n/);
+
+            if (lines.length < 2) return [];
+
+            const headers = lines.shift().split(",").map(h => h.trim());
+
+            return lines.filter(Boolean).map(line => {
+              const values = line.split(",");
+              const row = Object.fromEntries(
+                headers.map((header, i) => [
+                  header,
+                  (values[i] || "").trim()
+                ])
+              );
+
+              return {
+                latitude: Number(row.latitude),
+                longitude: Number(row.longitude),
+                date: row.acq_date,
+                time: row.acq_time,
+                confidence: row.confidence,
+                satellite: row.satellite,
+                frp: Number(row.frp),
+                status: "satellite_detection",
+                verified: false
+              };
+            }).filter(f =>
+              Number.isFinite(f.latitude) &&
+              Number.isFinite(f.longitude)
             );
-
-            return {
-              latitude: Number(row.latitude),
-              longitude: Number(row.longitude),
-              date: row.acq_date,
-              time: row.acq_time,
-              confidence: row.confidence,
-              satellite: row.satellite,
-              frp: Number(row.frp)
-            };
           })
-          .filter(f =>
-            Number.isFinite(f.latitude) &&
-            Number.isFinite(f.longitude)
-          );
+        );
+
+        const unique = new Map();
+
+        for (const fire of results.flat()) {
+          const key = [
+            fire.latitude,
+            fire.longitude,
+            fire.date,
+            fire.time,
+            fire.satellite
+          ].join("|");
+
+          unique.set(key, fire);
+        }
+
+        const fires = [...unique.values()];
 
         return Response.json(
           {
             source: "NASA FIRMS",
+            region: "Europe (approximate bounding box)",
             count: fires.length,
+            note: "Satellite hotspots are not confirmed fires.",
             fires
           },
           {
@@ -84,9 +111,12 @@ export default {
             }
           }
         );
-      } catch {
+      } catch (error) {
         return Response.json(
-          { error: "Yangın verileri alınırken bağlantı hatası oluştu." },
+          {
+            error: "Avrupa verileri alınamadı.",
+            message: "NASA FIRMS sınırları veya bağlantısı kontrol edilmeli."
+          },
           { status: 502 }
         );
       }
@@ -95,3 +125,4 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
+         
