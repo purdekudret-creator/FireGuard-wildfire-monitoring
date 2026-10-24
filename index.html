@@ -3,123 +3,492 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FireGuard | Yangın İzleme</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101820">
+  <title>FireGuard - Avrupa Yangın İzleme</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  >
+
   <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; background: #0b1220; color: #f1f5f9;
-      font-family: Arial, sans-serif;
+    :root {
+      color-scheme: dark;
+      --bg: #101820;
+      --panel: #202c36;
+      --red: #e53935;
+      --text: #f5f7fa;
+      --muted: #aebbc7;
+      --yellow: #ffca28;
     }
-    header { padding: 20px; background: #111c2e; border-bottom: 1px solid #29374b; }
-    h1 { margin: 0; color: #ff6248; font-size: 26px; }
-    header p { margin: 8px 0 0; color: #aab8cc; }
-    main { padding: 16px; max-width: 1200px; margin: auto; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 12px; margin-bottom: 16px; }
-    .card { background: #152238; border: 1px solid #2b3b52; padding: 16px; border-radius: 12px; }
-    .label { color: #aab8cc; font-size: 13px; }
-    .value { font-size: 27px; font-weight: bold; margin-top: 8px; }
-    button { background: #ff6248; color: #fff; border: 0; padding: 11px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; }
-    #status { color: #b9c7d9; margin: 14px 0; font-size: 14px; }
-    #map { height: 55vh; min-height: 340px; border-radius: 12px; border: 1px solid #34445a; }
-    .note { color: #aab8cc; font-size: 12px; line-height: 1.5; margin-top: 14px; }
-    .hotspot { background: #ff4d36; border: 2px solid #fff; border-radius: 50%; width: 13px; height: 13px; box-shadow: 0 0 12px #ff4d36; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      max-width: 1400px;
+      margin: 0 auto 18px;
+      padding: 20px;
+      background: linear-gradient(120deg, #b71c1c, #e53935);
+      border-radius: 14px;
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+      font-size: clamp(26px, 4vw, 38px);
+    }
+
+    header p { margin: 0; }
+
+    main {
+      max-width: 1400px;
+      margin: auto;
+    }
+
+    .panel {
+      background: var(--panel);
+      padding: 18px;
+      border-radius: 14px;
+      margin-bottom: 16px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat {
+      background: #17212a;
+      border-radius: 10px;
+      padding: 14px;
+      min-width: 0;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 25px;
+      font-weight: bold;
+      overflow-wrap: anywhere;
+    }
+
+    #status {
+      color: var(--yellow);
+      font-weight: bold;
+      line-height: 1.5;
+    }
+
+    #map {
+      width: 100%;
+      height: min(68vh, 680px);
+      min-height: 360px;
+      border-radius: 12px;
+      background: #17212a;
+      z-index: 1;
+    }
+
+    button {
+      border: 0;
+      border-radius: 9px;
+      padding: 12px 18px;
+      background: var(--red);
+      color: white;
+      font-weight: bold;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .secondary {
+      background: #405363;
+      margin-left: 8px;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ff3b30;
+      margin-right: 6px;
+    }
+
+    footer {
+      max-width: 1400px;
+      margin: 20px auto 0;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .leaflet-popup-content-wrapper,
+    .leaflet-popup-tip {
+      background: #202c36;
+      color: white;
+    }
+
+    .leaflet-popup-content {
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 12px; }
+      header { padding: 17px; }
+      .panel { padding: 13px; }
+      .stats { gap: 7px; }
+      .stat { padding: 10px; }
+      .stat-value { font-size: 20px; }
+      #map { min-height: 420px; height: 62vh; }
+      .secondary { margin: 8px 0 0; }
+    }
   </style>
 </head>
+
 <body>
   <header>
     <h1>🔥 FireGuard</h1>
-    <p>Uydu tabanlı sıcak nokta izleme paneli</p>
+    <p>Avrupa Uydu Yangın İzleme Paneli</p>
   </header>
+
   <main>
-    <div class="stats">
-      <div class="card">
-        <div class="label">Algılanan sıcak noktalar</div>
-        <div class="value" id="count">—</div>
+    <section class="panel">
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Uydu tespiti</div>
+          <div class="stat-value" id="fireCount">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Tamamlanan gruplar</div>
+          <div class="stat-value" id="batchCount">0 / 16</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Başarısız alanlar</div>
+          <div class="stat-value" id="failedCount">0</div>
+        </div>
       </div>
-      <div class="card">
-        <div class="label">Veri kaynağı</div>
-        <div class="value" style="font-size:20px">NASA FIRMS</div>
+
+      <p id="status" role="status" aria-live="polite">
+        Harita hazırlanıyor...
+      </p>
+
+      <button id="refreshButton" disabled>
+        Verileri yenile
+      </button>
+      <button id="clearButton" class="secondary">
+        Noktaları temizle
+      </button>
+
+      <p class="hint">
+        Kaynak: NASA FIRMS · VIIRS NOAA-20 · Son 1 günlük sorgu.
+        Veriler uydu sıcak nokta tespitleridir; doğrulanmış yangın anlamına gelmez.
+      </p>
+    </section>
+
+    <section class="panel">
+      <div id="map" aria-label="Avrupa uydu tespitleri haritası"></div>
+      <div class="legend">
+        <span><i class="dot"></i>Uydu sıcak nokta tespiti</span>
       </div>
-      <div class="card">
-        <div class="label">Son kontrol</div>
-        <div class="value" id="updated" style="font-size:18px">Henüz yok</div>
-      </div>
-    </div>
-    <button id="refresh">↻ Verileri yenile</button>
-    <div id="status">Harita hazırlanıyor...</div>
-    <div id="map"></div>
-    <p class="note">
-      Önemli: Uydu sıcak noktaları yangın olduğunun kesin kanıtı değildir.
-      Veriler gecikmeli olabilir; acil durumlar için resmî uyarıları takip edin.
-      Harita © OpenStreetMap katkıcıları.
-    </p>
+      <p class="hint">
+        Bir noktaya dokunarak koordinat, tarih, saat, güven değeri,
+        uydu ve FRP bilgilerini görüntüleyebilirsin.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>Veri durumu</h2>
+      <p id="details" class="hint">
+        API bağlantısı bekleniyor.
+      </p>
+    </section>
   </main>
+
+  <footer>
+    FireGuard Monitoring · Prototip · Acil durumlar için tek başına kullanılmamalıdır.
+  </footer>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <script>
-    const map = L.map("map").setView([41.2, 21.4], 6);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
-      attribution: "&copy; OpenStreetMap"
-    }).addTo(map);
+    (() => {
+      "use strict";
 
-    const markers = L.layerGroup().addTo(map);
+      const API_URL = "/api/fires";
+      const TOTAL_BATCHES = 16;
 
-    async function loadFires() {
-      const status = document.getElementById("status");
-      const button = document.getElementById("refresh");
-      button.disabled = true;
-      status.textContent = "NASA FIRMS verileri alınıyor...";
+      const fireCountEl = document.getElementById("fireCount");
+      const batchCountEl = document.getElementById("batchCount");
+      const failedCountEl = document.getElementById("failedCount");
+      const statusEl = document.getElementById("status");
+      const detailsEl = document.getElementById("details");
+      const refreshButton = document.getElementById("refreshButton");
+      const clearButton = document.getElementById("clearButton");
 
-      try {
-        const response = await fetch("/api/fires", { cache: "no-store" });
+      let map;
+      let markersLayer;
+      let isLoading = false;
+      let lastFires = [];
+
+      function setStatus(message) {
+        statusEl.textContent = message;
+      }
+
+      function initMap() {
+        if (typeof L === "undefined") {
+          setStatus(
+            "Harita kütüphanesi yüklenemedi. İnternet bağlantını kontrol et."
+          );
+          detailsEl.textContent =
+            "Leaflet yüklenemedi. Harita CDN adresine erişilemiyor olabilir.";
+          return false;
+        }
+
+        map = L.map("map").setView([49, 15], 4);
+
+        L.tileLayer(
+          "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          {
+            maxZoom: 18,
+            attribution: "&copy; OpenStreetMap katkıda bulunanlar"
+          }
+        ).addTo(map);
+
+        markersLayer = L.layerGroup().addTo(map);
+
+        setTimeout(() => map.invalidateSize(), 150);
+        return true;
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "Bilinmiyor").replace(/[&<>"']/g, char => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        })[char]);
+      }
+
+      function formatTime(value) {
+        if (value === null || value === undefined || value === "") {
+          return "Bilinmiyor";
+        }
+
+        const digits = String(value).padStart(4, "0");
+        if (!/^\d{4}$/.test(digits)) return String(value);
+
+        return digits.slice(0, 2) + ":" + digits.slice(2);
+      }
+
+      function markerPopup(fire) {
+        return `
+          <strong>🔥 Uydu sıcak nokta tespiti</strong><br>
+          <b>Enlem:</b> ${fire.latitude}<br>
+          <b>Boylam:</b> ${fire.longitude}<br>
+          <b>Tarih:</b> ${escapeHtml(fire.date)}<br>
+          <b>Saat (UTC):</b> ${escapeHtml(formatTime(fire.time))}<br>
+          <b>Güven:</b> ${escapeHtml(fire.confidence)}<br>
+          <b>Uydu:</b> ${escapeHtml(fire.satellite)}<br>
+          <b>FRP:</b> ${escapeHtml(fire.frp)} MW<br>
+          <hr>
+          <small>Bu tespit resmî olarak doğrulanmış yangın değildir.</small>
+        `;
+      }
+
+      function addFiresToMap(fires) {
+        const existing = new Set(
+          lastFires.map(fire => [
+            fire.latitude,
+            fire.longitude,
+            fire.date,
+            fire.time,
+            fire.satellite
+          ].join("|"))
+        );
+
+        for (const fire of fires) {
+          const key = [
+            fire.latitude,
+            fire.longitude,
+            fire.date,
+            fire.time,
+            fire.satellite
+          ].join("|");
+
+          if (existing.has(key)) continue;
+          existing.add(key);
+          lastFires.push(fire);
+
+          const marker = L.circleMarker(
+            [fire.latitude, fire.longitude],
+            {
+              radius: 6,
+              color: "#ff3b30",
+              weight: 1,
+              fillColor: "#ff3b30",
+              fillOpacity: 0.8
+            }
+          );
+
+          marker.bindPopup(markerPopup(fire));
+          marker.addTo(markersLayer);
+        }
+
+        fireCountEl.textContent = lastFires.length.toLocaleString("tr-TR");
+      }
+
+      async function loadBatch(batch) {
+        const response = await fetch(
+          `${API_URL}?batch=${batch}&t=${Date.now()}`,
+          {
+            cache: "no-store",
+            headers: { Accept: "application/json" }
+          }
+        );
+
         const data = await response.json();
 
-        if (!response.ok) throw new Error(data.error || "Veriler alınamadı.");
+        if (!response.ok || data.error) {
+          throw new Error(
+            data.details || data.message || data.error ||
+            `HTTP ${response.status}`
+          );
+        }
 
-        markers.clearLayers();
+        if (!Array.isArray(data.fires)) {
+          throw new Error("API beklenen fires listesini döndürmedi.");
+        }
 
-        data.fires.forEach(fire => {
-          if (!Number.isFinite(fire.latitude) ||
-              !Number.isFinite(fire.longitude)) return;
-
-          const marker = L.marker([fire.latitude, fire.longitude], {
-            icon: L.divIcon({
-              className: "",
-              html: '<div class="hotspot"></div>',
-              iconSize: [13, 13],
-              iconAnchor: [6, 6]
-            })
-          });
-
-          marker.bindPopup(`
-            <b>Uydu sıcak noktası</b><br>
-            Enlem: ${fire.latitude}<br>
-            Boylam: ${fire.longitude}<br>
-            Tarih: ${fire.date || "Bilinmiyor"}<br>
-            Saat: ${fire.time || "Bilinmiyor"} UTC<br>
-            Güven: ${fire.confidence || "Bilinmiyor"}<br>
-            FRP: ${fire.frp ?? "Bilinmiyor"}
-          `);
-
-          markers.addLayer(marker);
-        });
-
-        document.getElementById("count").textContent = data.count;
-        document.getElementById("updated").textContent =
-          new Date().toLocaleTimeString("tr-TR");
-        status.textContent =
-          `${data.count} sıcak nokta gösteriliyor. Kaynak: ${data.source}.`;
-      } catch (error) {
-        status.textContent = "Hata: " + error.message;
-      } finally {
-        button.disabled = false;
+        return data;
       }
-    }
 
-    document.getElementById("refresh").addEventListener("click", loadFires);
-    loadFires();
+      async function refreshData() {
+        if (isLoading || !map) return;
+
+        isLoading = true;
+        refreshButton.disabled = true;
+        markersLayer.clearLayers();
+        lastFires = [];
+
+        fireCountEl.textContent = "0";
+        batchCountEl.textContent = `0 / ${TOTAL_BATCHES}`;
+        failedCountEl.textContent = "0";
+        detailsEl.textContent = "NASA FIRMS bağlantısı kontrol ediliyor...";
+
+        let successfulBatches = 0;
+        let failedBatches = 0;
+        let failedAreas = 0;
+        let totalReportedBatches = TOTAL_BATCHES;
+
+        try {
+          for (let batch = 0; batch < TOTAL_BATCHES; batch++) {
+            setStatus(
+              `Avrupa taranıyor: grup ${batch + 1} / ${TOTAL_BATCHES}...`
+            );
+
+            try {
+              const data = await loadBatch(batch);
+
+              successfulBatches++;
+              totalReportedBatches = Number(data.totalBatches) ||
+                TOTAL_BATCHES;
+              failedAreas += Number(data.failedAreaCount) || 0;
+
+              addFiresToMap(data.fires);
+
+              batchCountEl.textContent =
+                `${batch + 1} / ${totalReportedBatches}`;
+              failedCountEl.textContent = failedAreas;
+
+              detailsEl.textContent =
+                `Son tamamlanan grup: ${batch}. ` +
+                `Bu gruptaki tespit: ${data.count}. ` +
+                `Başarılı grup sayısı: ${successfulBatches}.`;
+            } catch (error) {
+              failedBatches++;
+              detailsEl.textContent =
+                `Grup ${batch} alınamadı: ${error.message}. ` +
+                `Diğer gruplar denenmeye devam ediyor.`;
+            }
+          }
+
+          if (lastFires.length > 0) {
+            setStatus(
+              `Tarama tamamlandı. ${lastFires.length} uydu tespiti gösteriliyor.`
+            );
+
+            const bounds = markersLayer.getBounds();
+            if (bounds.isValid()) {
+              map.fitBounds(bounds, { padding: [25, 25], maxZoom: 7 });
+            }
+          } else {
+            setStatus(
+              "Tarama bitti ancak haritaya eklenecek tespit alınamadı."
+            );
+          }
+
+          detailsEl.textContent =
+            `Başarılı gruplar: ${successfulBatches}/${TOTAL_BATCHES}. ` +
+            `Başarısız gruplar: ${failedBatches}. ` +
+            `Başarısız alanlar: ${failedAreas}. ` +
+            `Gösterilen benzersiz tespit: ${lastFires.length}.`;
+        } catch (error) {
+          setStatus("Veriler alınırken beklenmeyen bir hata oluştu.");
+          detailsEl.textContent = error.message;
+        } finally {
+          isLoading = false;
+          refreshButton.disabled = false;
+        }
+      }
+
+      clearButton.addEventListener("click", () => {
+        if (!markersLayer) return;
+        markersLayer.clearLayers();
+        lastFires = [];
+        fireCountEl.textContent = "0";
+        setStatus("Haritadaki noktalar temizlendi. Yeniden yüklemek için Verileri yenile'ye bas.");
+      });
+
+      refreshButton.addEventListener("click", refreshData);
+
+      if (initMap()) {
+        refreshButton.disabled = false;
+        refreshData();
+      }
+    })();
   </script>
 </body>
 </html>
