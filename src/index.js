@@ -1,132 +1,120 @@
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (url.pathname === "/api/fires") {
-      const apiKey = env.NASA_FIRMS_MAP_KEY;
+    if (url.pathname !== "/api/fires") {
+      return env.ASSETS.fetch(request);
+    }
 
-      if (!apiKey) {
+    const apiKey = env.NASA_FIRMS_MAP_KEY;
+
+    if (!apiKey) {
+      return Response.json(
+        { error: "NASA_FIRMS_MAP_KEY Secret eksik." },
+        { status: 500 }
+      );
+    }
+
+    try {
+      const source = "VIIRS_NOAA20_NRT";
+      const area = "-12,34,35,72";
+      const dayRange = "1";
+
+      const nasaUrl =
+        "https://firms.modaps.eosdis.nasa.gov/api/area/csv/" +
+        `${encodeURIComponent(apiKey)}/${source}/${area}/${dayRange}`;
+
+      const response = await fetch(nasaUrl, {
+        headers: { Accept: "text/csv" }
+      });
+
+      const csv = await response.text();
+
+      if (!response.ok) {
         return Response.json(
-          { error: "NASA_FIRMS_MAP_KEY Secret eksik." },
-          { status: 500 }
+          {
+            error: "NASA FIRMS isteği başarısız.",
+            httpStatus: response.status,
+            details: csv.slice(0, 500)
+          },
+          {
+            status: 502,
+            headers: { "Cache-Control": "no-store" }
+          }
         );
       }
 
-      try {
-        // Yaklaşık Avrupa sınırları
-        const west = -12;
-        const south = 34;
-        const east = 35;
-        const north = 72;
-        const step = 5;
+      const lines = csv.trim().split(/\r?\n/);
 
-        const source = "VIIRS_NOAA20_NRT";
-        const areas = [];
-
-        for (let lon = west; lon < east; lon += step) {
-          for (let lat = south; lat < north; lat += step) {
-            areas.push([
-              lon,
-              lat,
-              Math.min(lon + step, east),
-              Math.min(lat + step, north)
-            ].join(","));
-          }
-        }
-
-        const results = await Promise.all(
-          areas.map(async area => {
-            const nasaUrl =
-              "https://firms.modaps.eosdis.nasa.gov/api/area/csv/" +
-              `${encodeURIComponent(apiKey)}/${source}/${area}/1`;
-
-            const response = await fetch(nasaUrl);
-
-            if (!response.ok) {
-  const details = await response.text();
-  throw new Error(
-    `NASA FIRMS HTTP ${response.status}: ${details.slice(0, 300)}`
-  );
-}
-              
-            
-
-            const csv = await response.text();
-            const lines = csv.trim().split(/\r?\n/);
-
-            if (lines.length < 2) return [];
-
-            const headers = lines.shift().split(",").map(h => h.trim());
-
-            return lines.filter(Boolean).map(line => {
-              const values = line.split(",");
-              const row = Object.fromEntries(
-                headers.map((header, i) => [
-                  header,
-                  (values[i] || "").trim()
-                ])
-              );
-
-              return {
-                latitude: Number(row.latitude),
-                longitude: Number(row.longitude),
-                date: row.acq_date,
-                time: row.acq_time,
-                confidence: row.confidence,
-                satellite: row.satellite,
-                frp: Number(row.frp),
-                status: "satellite_detection",
-                verified: false
-              };
-            }).filter(f =>
-              Number.isFinite(f.latitude) &&
-              Number.isFinite(f.longitude)
-            );
-          })
-        );
-
-        const unique = new Map();
-
-        for (const fire of results.flat()) {
-          const key = [
-            fire.latitude,
-            fire.longitude,
-            fire.date,
-            fire.time,
-            fire.satellite
-          ].join("|");
-
-          unique.set(key, fire);
-        }
-
-        const fires = [...unique.values()];
-
+      if (
+        !lines.length ||
+        lines[0].toLowerCase().includes("error")
+      ) {
         return Response.json(
           {
-            source: "NASA FIRMS",
-            region: "Europe (approximate bounding box)",
-            count: fires.length,
-            note: "Satellite hotspots are not confirmed fires.",
-            fires
-          },
-          {
-            headers: {
-              "Cache-Control": "public, max-age=300"
-            }
-          }
-        );
-      } catch (error) {
-        return Response.json(
-          {
-            error: "Avrupa verileri alınamadı.",
-            message: "NASA FIRMS sınırları veya bağlantısı kontrol edilmeli."
+            error: "NASA FIRMS geçerli CSV verisi döndürmedi.",
+            details: csv.slice(0, 500)
           },
           { status: 502 }
         );
       }
-    }
 
-    return env.ASSETS.fetch(request);
+      const headers = lines.shift().split(",").map(h => h.trim());
+
+      const fires = lines
+        .filter(Boolean)
+        .map(line => {
+          const values = line.split(",");
+          const row = Object.fromEntries(
+            headers.map((header, i) => [
+              header,
+              (values[i] || "").trim()
+            ])
+          );
+
+          return {
+            latitude: Number(row.latitude),
+            longitude: Number(row.longitude),
+            date: row.acq_date,
+            time: row.acq_time,
+            confidence: row.confidence,
+            satellite: row.satellite,
+            frp: Number(row.frp),
+            status: "satellite_detection",
+            verified: false
+          };
+        })
+        .filter(fire =>
+          Number.isFinite(fire.latitude) &&
+          Number.isFinite(fire.longitude)
+        );
+
+      return Response.json(
+        {
+          source: "NASA FIRMS",
+          region: "Europe (approximate bounding box)",
+          count: fires.length,
+          note: "Satellite hotspots are not confirmed fires.",
+          fires
+        },
+        {
+          headers: {
+            "Cache-Control": "no-store; max-age=0"
+          }
+        }
+      );
+    } catch (error) {
+      return Response.json(
+        {
+          error: "FireGuard verileri alınamadı.",
+          details: String(error.message || error).slice(0, 500)
+        },
+        {
+          status: 502,
+          headers: { "Cache-Control": "no-store" }
+        }
+      );
+    }
   }
 };
-         
